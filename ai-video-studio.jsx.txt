@@ -1,0 +1,606 @@
+import { useState, useEffect } from "react";
+
+const categories = [
+  { id: "horror", label: "Horror", emoji: "👻", color: "#ff2d55", desc: "Dark, scary AI cartoons" },
+  { id: "values", label: "Human Values", emoji: "❤️", color: "#ff9f0a", desc: "Kindness & empathy stories" },
+  { id: "life", label: "About Life", emoji: "🌱", color: "#30d158", desc: "Life lessons animated" },
+  { id: "lesson", label: "Good Lessons", emoji: "📖", color: "#0a84ff", desc: "Moral & wisdom tales" },
+  { id: "motivation", label: "Motivation", emoji: "🔥", color: "#bf5af2", desc: "Inspirational content" },
+  { id: "comedy", label: "Comedy", emoji: "😂", color: "#ffd60a", desc: "Funny AI cartoon skits" },
+  { id: "mystery", label: "Mystery", emoji: "🔮", color: "#64d2ff", desc: "Suspense & thriller" },
+  { id: "kids", label: "Kids & Fun", emoji: "🎠", color: "#ff6b35", desc: "Child-friendly stories" },
+];
+
+const textStyles = [
+  { id: "neon", label: "Neon Glow", preview: "NEON", style: { color: "#0ff", textShadow: "0 0 10px #0ff, 0 0 20px #0ff", fontFamily: "monospace", fontWeight: 900 } },
+  { id: "fire", label: "Fire Text", preview: "FIRE", style: { color: "#ff6b00", textShadow: "0 0 8px #ff0, 0 0 16px #f60", fontFamily: "Impact", fontWeight: 900 } },
+  { id: "elegant", label: "Elegant", preview: "Elegant", style: { color: "#f5e6c8", fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: "1.1em" } },
+  { id: "bold3d", label: "Bold 3D", preview: "BOLD", style: { color: "#fff", textShadow: "2px 2px 0 #e63946, 4px 4px 0 #c1121f", fontFamily: "Impact", fontWeight: 900 } },
+  { id: "handwritten", label: "Handwritten", preview: "Story", style: { color: "#ffe", fontFamily: "cursive", fontSize: "1.2em" } },
+  { id: "glitch", label: "Glitch", preview: "GLITCH", style: { color: "#fff", textShadow: "2px 0 #f0f, -2px 0 #0ff", fontFamily: "monospace", fontWeight: 700 } },
+];
+
+const audioStyles = [
+  { id: "epic", label: "Epic Cinematic", emoji: "🎬", desc: "Dramatic orchestral" },
+  { id: "horror_sfx", label: "Horror Ambience", emoji: "🦇", desc: "Creepy, dark tones" },
+  { id: "lofi", label: "Lo-Fi Chill", emoji: "🎵", desc: "Relaxed beats" },
+  { id: "upbeat", label: "Upbeat Pop", emoji: "🎉", desc: "Fun & energetic" },
+  { id: "nature", label: "Nature Sounds", emoji: "🌿", desc: "Calm, peaceful" },
+  { id: "hiphop", label: "Hip-Hop Beat", emoji: "🎤", desc: "Urban rhythm" },
+  { id: "dramatic", label: "Dramatic Tension", emoji: "⚡", desc: "Thriller pacing" },
+  { id: "kids_music", label: "Kids Jingle", emoji: "🎠", desc: "Playful & bright" },
+];
+
+const scheduleOptions = ["Every Hour", "Every 3 Hours", "Every 6 Hours", "Twice Daily", "Daily", "Custom"];
+const durations = ["30s Reel", "60s Short", "3 min", "5 min", "10 min"];
+
+const mockVideos = [
+  { id: 1, title: "The Lost Soul", category: "Horror", status: "published", platform: ["youtube", "instagram"], views: "124K", time: "2h ago", thumb: "👻" },
+  { id: 2, title: "The Kind Stranger", category: "Human Values", status: "published", platform: ["youtube", "instagram"], views: "89K", time: "5h ago", thumb: "❤️" },
+  { id: 3, title: "Why We Fall", category: "Motivation", status: "generating", platform: ["youtube"], views: "--", time: "In progress", thumb: "🔥" },
+  { id: 4, title: "The Forest Lesson", category: "Good Lessons", status: "scheduled", platform: ["instagram"], views: "--", time: "In 2h", thumb: "📖" },
+  { id: 5, title: "Laugh Factory", category: "Comedy", status: "published", platform: ["youtube", "instagram"], views: "211K", time: "1d ago", thumb: "😂" },
+];
+
+const stats = [
+  { label: "Total Views", value: "1.2M", icon: "👁", trend: "+18%" },
+  { label: "Videos Posted", value: "347", icon: "🎬", trend: "+24" },
+  { label: "Subscribers", value: "48.2K", icon: "🔔", trend: "+1.2K" },
+  { label: "Revenue Est.", value: "$842", icon: "💰", trend: "+$120" },
+];
+
+export default function App() {
+  const [page, setPage] = useState("dashboard");
+  const [ytLinked, setYtLinked] = useState(false);
+  const [igLinked, setIgLinked] = useState(false);
+  const [selectedCats, setSelectedCats] = useState(["horror", "values"]);
+  const [selectedAudio, setSelectedAudio] = useState("epic");
+  const [selectedText, setSelectedText] = useState("neon");
+  const [schedule, setSchedule] = useState("Every 6 Hours");
+  const [duration, setDuration] = useState("60s Short");
+  const [isLive, setIsLive] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState(0);
+  const [genStep, setGenStep] = useState("");
+  const [pulse, setPulse] = useState(false);
+
+  const steps = ["Scripting story...", "Generating cartoon frames...", "Applying text overlays...", "Syncing audio...", "Rendering final video...", "Uploading to platforms..."];
+
+  useEffect(() => {
+    const t = setInterval(() => setPulse(p => !p), 1200);
+    return () => clearInterval(t);
+  }, []);
+
+  const startGenerate = () => {
+    setGenerating(true);
+    setGenProgress(0);
+    let step = 0;
+    setGenStep(steps[0]);
+    const interval = setInterval(() => {
+      step++;
+      if (step >= steps.length) {
+        clearInterval(interval);
+        setGenerating(false);
+        setGenProgress(100);
+        setGenStep("✅ Video Posted!");
+        setTimeout(() => setGenProgress(0), 2000);
+        return;
+      }
+      setGenProgress(Math.round((step / steps.length) * 100));
+      setGenStep(steps[step]);
+    }, 900);
+  };
+
+  const toggleCat = (id) => {
+    setSelectedCats(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+
+  const nav = [
+    { id: "dashboard", icon: "⚡", label: "Dashboard" },
+    { id: "connect", icon: "🔗", label: "Connect" },
+    { id: "studio", icon: "🎬", label: "Studio" },
+    { id: "videos", icon: "📱", label: "Videos" },
+    { id: "analytics", icon: "📊", label: "Analytics" },
+  ];
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#070710",
+      fontFamily: "'Segoe UI', sans-serif", color: "#e8e8f0",
+      display: "flex"
+    }}>
+      {/* Sidebar */}
+      <div style={{
+        width: 220, background: "linear-gradient(180deg, #0d0d1f 0%, #070710 100%)",
+        borderRight: "1px solid #1a1a3a", padding: "28px 0", display: "flex",
+        flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh"
+      }}>
+        <div style={{ padding: "0 24px 28px", borderBottom: "1px solid #1a1a3a" }}>
+          <div style={{ fontSize: 22, fontWeight: 900, background: "linear-gradient(90deg, #7c3aed, #ec4899)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            ✦ VidForge AI
+          </div>
+          <div style={{ fontSize: 11, color: "#666", marginTop: 3 }}>Auto Video Platform</div>
+        </div>
+
+        {nav.map(n => (
+          <button key={n.id} onClick={() => setPage(n.id)} style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "12px 24px",
+            background: page === n.id ? "linear-gradient(90deg, rgba(124,58,237,0.2), transparent)" : "transparent",
+            border: "none", borderLeft: page === n.id ? "3px solid #7c3aed" : "3px solid transparent",
+            color: page === n.id ? "#c4b5fd" : "#666", cursor: "pointer", fontSize: 14,
+            fontWeight: page === n.id ? 700 : 400, transition: "all 0.2s", textAlign: "left"
+          }}>
+            <span style={{ fontSize: 18 }}>{n.icon}</span> {n.label}
+          </button>
+        ))}
+
+        <div style={{ marginTop: "auto", padding: "16px 24px", borderTop: "1px solid #1a1a3a" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 10, height: 10, borderRadius: "50%",
+              background: isLive ? "#30d158" : "#555",
+              boxShadow: isLive ? "0 0 8px #30d158" : "none",
+              animation: isLive ? "blink 1s infinite" : "none"
+            }} />
+            <span style={{ fontSize: 12, color: isLive ? "#30d158" : "#555" }}>
+              {isLive ? "Auto-Posting LIVE" : "Paused"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex: 1, overflow: "auto" }}>
+        {/* Header */}
+        <div style={{
+          padding: "20px 32px", borderBottom: "1px solid #1a1a3a",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "rgba(7,7,16,0.8)", backdropFilter: "blur(10px)",
+          position: "sticky", top: 0, zIndex: 10
+        }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>
+              {page === "dashboard" && "⚡ Dashboard"}
+              {page === "connect" && "🔗 Connect Accounts"}
+              {page === "studio" && "🎬 AI Studio Settings"}
+              {page === "videos" && "📱 My Videos"}
+              {page === "analytics" && "📊 Analytics"}
+            </div>
+            <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>
+              {!ytLinked || !igLinked ? "⚠️ Connect your accounts to start auto-posting" : "All systems ready"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {ytLinked && <div style={{ background: "rgba(255,0,0,0.15)", border: "1px solid #f00", borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#ff4444" }}>▶ YouTube</div>}
+            {igLinked && <div style={{ background: "rgba(236,72,153,0.15)", border: "1px solid #ec4899", borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#ec4899" }}>◈ Instagram</div>}
+            <button onClick={() => { setIsLive(!isLive); }} style={{
+              background: isLive ? "rgba(255,45,85,0.2)" : "linear-gradient(135deg, #7c3aed, #ec4899)",
+              border: isLive ? "1px solid #ff2d55" : "none", borderRadius: 10,
+              color: "#fff", padding: "8px 20px", cursor: "pointer", fontWeight: 700, fontSize: 13
+            }}>
+              {isLive ? "⏸ Pause Auto" : "▶ Go Live"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 32 }}>
+
+          {/* DASHBOARD */}
+          {page === "dashboard" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+              {(!ytLinked || !igLinked) && (
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(236,72,153,0.1))",
+                  border: "1px solid rgba(124,58,237,0.4)", borderRadius: 16, padding: 24,
+                  display: "flex", justifyContent: "space-between", alignItems: "center"
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>🚀 Get Started in 2 Steps</div>
+                    <div style={{ color: "#888", fontSize: 14 }}>Connect YouTube & Instagram → Configure your style → We do everything else</div>
+                  </div>
+                  <button onClick={() => setPage("connect")} style={{
+                    background: "linear-gradient(135deg, #7c3aed, #ec4899)", border: "none",
+                    borderRadius: 10, color: "#fff", padding: "12px 24px", cursor: "pointer", fontWeight: 700
+                  }}>Connect Now →</button>
+                </div>
+              )}
+
+              {/* Stats */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+                {stats.map(s => (
+                  <div key={s.label} style={{
+                    background: "linear-gradient(135deg, #0d0d24, #111128)",
+                    border: "1px solid #1a1a3a", borderRadius: 16, padding: 20
+                  }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+                    <div style={{ fontSize: 26, fontWeight: 900 }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{s.label}</div>
+                    <div style={{ fontSize: 12, color: "#30d158", marginTop: 6 }}>{s.trend} this week</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recent + Quick Generate */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 16, padding: 24 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 15 }}>📋 Recent Videos</div>
+                  {mockVideos.slice(0, 4).map(v => (
+                    <div key={v.id} style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "12px 0",
+                      borderBottom: "1px solid #1a1a3a"
+                    }}>
+                      <div style={{ width: 44, height: 44, background: "#1a1a35", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{v.thumb}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{v.title}</div>
+                        <div style={{ fontSize: 12, color: "#555" }}>{v.category} · {v.time}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{
+                          fontSize: 11, padding: "3px 10px", borderRadius: 20,
+                          background: v.status === "published" ? "rgba(48,209,88,0.15)" : v.status === "generating" ? "rgba(255,159,10,0.15)" : "rgba(10,132,255,0.15)",
+                          color: v.status === "published" ? "#30d158" : v.status === "generating" ? "#ff9f0a" : "#0a84ff",
+                          border: `1px solid ${v.status === "published" ? "#30d158" : v.status === "generating" ? "#ff9f0a" : "#0a84ff"}44`
+                        }}>{v.status}</div>
+                        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{v.views} views</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 16, padding: 24 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 15 }}>⚡ Quick Generate</div>
+                  <div style={{ fontSize: 12, color: "#666", marginBottom: 12 }}>Instantly create & post one video now</div>
+                  <select style={{
+                    width: "100%", background: "#111128", border: "1px solid #2a2a4a",
+                    borderRadius: 10, padding: "10px 14px", color: "#e8e8f0", marginBottom: 12, fontSize: 13
+                  }}>
+                    {categories.map(c => <option key={c.id}>{c.emoji} {c.label}</option>)}
+                  </select>
+                  <select style={{
+                    width: "100%", background: "#111128", border: "1px solid #2a2a4a",
+                    borderRadius: 10, padding: "10px 14px", color: "#e8e8f0", marginBottom: 16, fontSize: 13
+                  }}>
+                    {durations.map(d => <option key={d}>{d}</option>)}
+                  </select>
+                  {generating ? (
+                    <div>
+                      <div style={{ fontSize: 13, color: "#c4b5fd", marginBottom: 8 }}>{genStep}</div>
+                      <div style={{ height: 8, background: "#1a1a3a", borderRadius: 10, overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%", width: `${genProgress}%`,
+                          background: "linear-gradient(90deg, #7c3aed, #ec4899)",
+                          transition: "width 0.8s ease", borderRadius: 10
+                        }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={startGenerate} style={{
+                      width: "100%", background: "linear-gradient(135deg, #7c3aed, #ec4899)",
+                      border: "none", borderRadius: 10, color: "#fff", padding: "12px",
+                      cursor: "pointer", fontWeight: 700, fontSize: 14
+                    }}>🎬 Generate & Post Now</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CONNECT */}
+          {page === "connect" && (
+            <div style={{ maxWidth: 600, display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ color: "#888", fontSize: 14 }}>Link your accounts once — we handle all uploads automatically forever.</div>
+
+              {/* YouTube */}
+              <div style={{
+                background: "#0d0d24", border: `1px solid ${ytLinked ? "#30d158" : "#1a1a3a"}`,
+                borderRadius: 20, padding: 28
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                    <div style={{ width: 56, height: 56, background: "rgba(255,0,0,0.15)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>▶</div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 18 }}>YouTube</div>
+                      <div style={{ color: "#666", fontSize: 13, marginTop: 3 }}>Auto-post Shorts & long videos</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    padding: "4px 14px", borderRadius: 20, fontSize: 12,
+                    background: ytLinked ? "rgba(48,209,88,0.15)" : "rgba(255,0,0,0.1)",
+                    color: ytLinked ? "#30d158" : "#ff4444",
+                    border: `1px solid ${ytLinked ? "#30d158" : "#ff444444"}`
+                  }}>{ytLinked ? "✓ Connected" : "Not Connected"}</div>
+                </div>
+                {ytLinked && (
+                  <div style={{ marginTop: 16, padding: 14, background: "#111128", borderRadius: 10, fontSize: 13, color: "#888" }}>
+                    Channel: <span style={{ color: "#e8e8f0" }}>@YourChannel</span> · Subscribers: <span style={{ color: "#30d158" }}>12.4K</span>
+                  </div>
+                )}
+                <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
+                  <button onClick={() => setYtLinked(!ytLinked)} style={{
+                    flex: 1, background: ytLinked ? "transparent" : "linear-gradient(135deg, #ff0000, #cc0000)",
+                    border: ytLinked ? "1px solid #ff4444" : "none", borderRadius: 10,
+                    color: "#fff", padding: "12px", cursor: "pointer", fontWeight: 700
+                  }}>{ytLinked ? "Disconnect" : "🔗 Connect YouTube"}</button>
+                  {ytLinked && <button style={{ background: "#1a1a35", border: "1px solid #2a2a4a", borderRadius: 10, color: "#888", padding: "12px 20px", cursor: "pointer" }}>⚙ Settings</button>}
+                </div>
+                {!ytLinked && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: "#444", textAlign: "center" }}>
+                    You'll be redirected to Google OAuth for secure login
+                  </div>
+                )}
+              </div>
+
+              {/* Instagram */}
+              <div style={{
+                background: "#0d0d24", border: `1px solid ${igLinked ? "#30d158" : "#1a1a3a"}`,
+                borderRadius: 20, padding: 28
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                    <div style={{ width: 56, height: 56, background: "rgba(236,72,153,0.15)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>◈</div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 18 }}>Instagram</div>
+                      <div style={{ color: "#666", fontSize: 13, marginTop: 3 }}>Auto-post Reels & Stories</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    padding: "4px 14px", borderRadius: 20, fontSize: 12,
+                    background: igLinked ? "rgba(48,209,88,0.15)" : "rgba(236,72,153,0.1)",
+                    color: igLinked ? "#30d158" : "#ec4899",
+                    border: `1px solid ${igLinked ? "#30d158" : "#ec489944"}`
+                  }}>{igLinked ? "✓ Connected" : "Not Connected"}</div>
+                </div>
+                {igLinked && (
+                  <div style={{ marginTop: 16, padding: 14, background: "#111128", borderRadius: 10, fontSize: 13, color: "#888" }}>
+                    Account: <span style={{ color: "#e8e8f0" }}>@your_handle</span> · Followers: <span style={{ color: "#30d158" }}>35.8K</span>
+                  </div>
+                )}
+                <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
+                  <button onClick={() => setIgLinked(!igLinked)} style={{
+                    flex: 1, background: igLinked ? "transparent" : "linear-gradient(135deg, #833ab4, #ec4899, #fd1d1d)",
+                    border: igLinked ? "1px solid #ec4899" : "none", borderRadius: 10,
+                    color: "#fff", padding: "12px", cursor: "pointer", fontWeight: 700
+                  }}>{igLinked ? "Disconnect" : "🔗 Connect Instagram"}</button>
+                  {igLinked && <button style={{ background: "#1a1a35", border: "1px solid #2a2a4a", borderRadius: 10, color: "#888", padding: "12px 20px", cursor: "pointer" }}>⚙ Settings</button>}
+                </div>
+              </div>
+
+              {ytLinked && igLinked && (
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(48,209,88,0.1), rgba(48,209,88,0.05))",
+                  border: "1px solid #30d158", borderRadius: 16, padding: 20, textAlign: "center"
+                }}>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>🎉</div>
+                  <div style={{ fontWeight: 800, color: "#30d158", fontSize: 16 }}>Both Accounts Connected!</div>
+                  <div style={{ color: "#888", fontSize: 13, marginTop: 6 }}>Now configure your AI Studio and hit Go Live. We'll do the rest.</div>
+                  <button onClick={() => setPage("studio")} style={{
+                    marginTop: 14, background: "linear-gradient(135deg, #7c3aed, #ec4899)",
+                    border: "none", borderRadius: 10, color: "#fff", padding: "10px 28px",
+                    cursor: "pointer", fontWeight: 700
+                  }}>⚙ Configure Studio →</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STUDIO */}
+          {page === "studio" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              {/* Categories */}
+              <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>📂 Video Categories</div>
+                <div style={{ color: "#666", fontSize: 13, marginBottom: 20 }}>Pick which types of videos to auto-generate and post</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                  {categories.map(c => (
+                    <button key={c.id} onClick={() => toggleCat(c.id)} style={{
+                      background: selectedCats.includes(c.id) ? `${c.color}22` : "#111128",
+                      border: `1.5px solid ${selectedCats.includes(c.id) ? c.color : "#2a2a4a"}`,
+                      borderRadius: 14, padding: "16px 12px", cursor: "pointer", textAlign: "left",
+                      transition: "all 0.2s"
+                    }}>
+                      <div style={{ fontSize: 24, marginBottom: 6 }}>{c.emoji}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: selectedCats.includes(c.id) ? c.color : "#e8e8f0" }}>{c.label}</div>
+                      <div style={{ fontSize: 11, color: "#555", marginTop: 3 }}>{c.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Text Styles */}
+              <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>✍️ Text & Caption Style</div>
+                <div style={{ color: "#666", fontSize: 13, marginBottom: 20 }}>Choose how text overlays and captions look in your videos</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+                  {textStyles.map(t => (
+                    <button key={t.id} onClick={() => setSelectedText(t.id)} style={{
+                      background: selectedText === t.id ? "rgba(124,58,237,0.2)" : "#111128",
+                      border: `1.5px solid ${selectedText === t.id ? "#7c3aed" : "#2a2a4a"}`,
+                      borderRadius: 14, padding: "18px 10px", cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 10
+                    }}>
+                      <span style={{ ...t.style, fontSize: "1.3em" }}>{t.preview}</span>
+                      <span style={{ fontSize: 11, color: "#888" }}>{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Audio */}
+              <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>🎵 Background Audio</div>
+                <div style={{ color: "#666", fontSize: 13, marginBottom: 20 }}>AI picks the best match per category, or lock one style</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                  {audioStyles.map(a => (
+                    <button key={a.id} onClick={() => setSelectedAudio(a.id)} style={{
+                      background: selectedAudio === a.id ? "rgba(124,58,237,0.2)" : "#111128",
+                      border: `1.5px solid ${selectedAudio === a.id ? "#7c3aed" : "#2a2a4a"}`,
+                      borderRadius: 14, padding: "16px", cursor: "pointer", textAlign: "left"
+                    }}>
+                      <div style={{ fontSize: 22, marginBottom: 6 }}>{a.emoji}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: selectedAudio === a.id ? "#c4b5fd" : "#e8e8f0" }}>{a.label}</div>
+                      <div style={{ fontSize: 11, color: "#555", marginTop: 3 }}>{a.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Schedule & Duration */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16 }}>⏰ Posting Schedule</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {scheduleOptions.map(s => (
+                      <button key={s} onClick={() => setSchedule(s)} style={{
+                        background: schedule === s ? "rgba(124,58,237,0.2)" : "transparent",
+                        border: `1px solid ${schedule === s ? "#7c3aed" : "#2a2a4a"}`,
+                        borderRadius: 10, padding: "10px 16px", cursor: "pointer", textAlign: "left",
+                        color: schedule === s ? "#c4b5fd" : "#888", fontSize: 14
+                      }}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16 }}>📏 Video Duration</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {durations.map(d => (
+                      <button key={d} onClick={() => setDuration(d)} style={{
+                        background: duration === d ? "rgba(124,58,237,0.2)" : "transparent",
+                        border: `1px solid ${duration === d ? "#7c3aed" : "#2a2a4a"}`,
+                        borderRadius: 10, padding: "10px 16px", cursor: "pointer", textAlign: "left",
+                        color: duration === d ? "#c4b5fd" : "#888", fontSize: 14
+                      }}>{d}</button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 20, padding: 16, background: "#111128", borderRadius: 12 }}>
+                    <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>💡 Recommendation</div>
+                    <div style={{ fontSize: 13, color: "#888" }}>60s Shorts/Reels get <span style={{ color: "#30d158" }}>3x more reach</span> for new channels</div>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={() => setIsLive(true)} style={{
+                background: "linear-gradient(135deg, #7c3aed, #ec4899)",
+                border: "none", borderRadius: 14, color: "#fff", padding: "16px",
+                cursor: "pointer", fontWeight: 800, fontSize: 16
+              }}>✅ Save Settings & Activate Auto-Posting</button>
+            </div>
+          )}
+
+          {/* VIDEOS */}
+          {page === "videos" && (
+            <div>
+              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                {["All", "Published", "Scheduled", "Generating"].map(f => (
+                  <button key={f} style={{
+                    background: f === "All" ? "rgba(124,58,237,0.2)" : "transparent",
+                    border: `1px solid ${f === "All" ? "#7c3aed" : "#2a2a4a"}`,
+                    borderRadius: 20, padding: "6px 18px", cursor: "pointer",
+                    color: f === "All" ? "#c4b5fd" : "#666", fontSize: 13
+                  }}>{f}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {mockVideos.map(v => (
+                  <div key={v.id} style={{
+                    background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 16,
+                    padding: 20, display: "flex", alignItems: "center", gap: 16
+                  }}>
+                    <div style={{ width: 56, height: 56, background: "#1a1a35", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{v.thumb}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{v.title}</div>
+                      <div style={{ color: "#555", fontSize: 12, marginTop: 4 }}>{v.category} · {v.time}</div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                        {v.platform.includes("youtube") && <span style={{ fontSize: 11, background: "rgba(255,0,0,0.1)", border: "1px solid #ff000033", borderRadius: 8, padding: "2px 8px", color: "#ff4444" }}>▶ YouTube</span>}
+                        {v.platform.includes("instagram") && <span style={{ fontSize: 11, background: "rgba(236,72,153,0.1)", border: "1px solid #ec489933", borderRadius: 8, padding: "2px 8px", color: "#ec4899" }}>◈ Instagram</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{
+                        fontSize: 12, padding: "4px 12px", borderRadius: 20, marginBottom: 8,
+                        background: v.status === "published" ? "rgba(48,209,88,0.15)" : v.status === "generating" ? "rgba(255,159,10,0.15)" : "rgba(10,132,255,0.15)",
+                        color: v.status === "published" ? "#30d158" : v.status === "generating" ? "#ff9f0a" : "#0a84ff",
+                      }}>{v.status}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800 }}>{v.views}</div>
+                      <div style={{ fontSize: 11, color: "#555" }}>views</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ANALYTICS */}
+          {page === "analytics" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+                {stats.map(s => (
+                  <div key={s.label} style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 16, padding: 20 }}>
+                    <div style={{ fontSize: 28 }}>{s.icon}</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, marginTop: 8 }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: "#666" }}>{s.label}</div>
+                    <div style={{ fontSize: 13, color: "#30d158", marginTop: 6 }}>{s.trend}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 28 }}>
+                <div style={{ fontWeight: 800, marginBottom: 20 }}>📈 Views This Week</div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 120 }}>
+                  {[40, 65, 45, 90, 72, 110, 95].map((h, i) => (
+                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                      <div style={{
+                        width: "100%", height: `${h}%`,
+                        background: `linear-gradient(180deg, #7c3aed, #ec4899)`,
+                        borderRadius: "6px 6px 0 0", opacity: 0.8
+                      }} />
+                      <div style={{ fontSize: 11, color: "#555" }}>{["M", "T", "W", "T", "F", "S", "S"][i]}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 24 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 16 }}>🏆 Top Categories</div>
+                  {[["Comedy", "38%", "#ffd60a"], ["Horror", "27%", "#ff2d55"], ["Motivation", "21%", "#bf5af2"], ["Life", "14%", "#30d158"]].map(([name, pct, color]) => (
+                    <div key={name} style={{ marginBottom: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                        <span>{name}</span><span style={{ color }}>{pct}</span>
+                      </div>
+                      <div style={{ height: 6, background: "#1a1a35", borderRadius: 10 }}>
+                        <div style={{ height: "100%", width: pct, background: color, borderRadius: 10 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "#0d0d24", border: "1px solid #1a1a3a", borderRadius: 20, padding: 24 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 16 }}>💰 Revenue Breakdown</div>
+                  {[["YouTube AdSense", "$524", "#ff4444"], ["Instagram Bonus", "$218", "#ec4899"], ["Sponsorships", "$100", "#7c3aed"]].map(([src, amt, color]) => (
+                    <div key={src} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "12px 0", borderBottom: "1px solid #1a1a3a", fontSize: 14
+                    }}>
+                      <span style={{ color: "#888" }}>{src}</span>
+                      <span style={{ color, fontWeight: 700 }}>{amt}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontWeight: 800, fontSize: 16 }}>
+                    <span>Total</span><span style={{ color: "#30d158" }}>$842</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #070710; }
+        ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+        select option { background: #111128; }
+      `}</style>
+    </div>
+  );
+}
