@@ -472,6 +472,7 @@ app.get('/auth/youtube/callback', async (req, res) => {
 // ─────────────────────────────────────────────
 // START
 // ─────────────────────────────────────────────
+process.env.NODE_OPTIONS = "--max-old-space-size=460";
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`\n🚀 VidForge AI v10.0 — spawn FFmpeg (no buffer limit) + Cloudflare AI`);
@@ -492,3 +493,5 @@ if (RENDER_URL) {
   }, 10 * 60 * 1000); // every 10 minutes
   console.log(`[KeepAlive] Active — pinging every 10 minutes`);
 }
+
+// Increase Node.js memory limit
