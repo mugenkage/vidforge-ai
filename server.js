@@ -6,7 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
-const execPromise = util.promisify(exec);
+const execPromise = (cmd) => new Promise((resolve, reject) => {
+  exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
+    if (err) reject(err); else resolve({ stdout, stderr });
+  });
+});
 
 const app = express();
 app.use(express.json());
