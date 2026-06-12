@@ -4,13 +4,7 @@ const axios = require('axios');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = (cmd) => new Promise((resolve, reject) => {
-  exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
-    if (err) reject(err); else resolve({ stdout, stderr });
-  });
-});
+const { spawn } = require('child_process');
 
 const app = express();
 app.use(express.json());
@@ -27,6 +21,33 @@ const INSTAGRAM_USER_ID      = process.env.INSTAGRAM_USER_ID;
 const GROQ_API_KEY           = process.env.GROQ_API_KEY;
 const CF_ACCOUNT_ID          = process.env.CLOUDFLARE_ACCOUNT_ID;
 const CF_API_TOKEN           = process.env.CLOUDFLARE_API_TOKEN;
+
+// ─────────────────────────────────────────────
+// FFMPEG HELPER — uses spawn (no buffer limit)
+// ─────────────────────────────────────────────
+function runFFmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn('ffmpeg', args);
+    let errOut = '';
+    ff.stderr.on('data', d => { errOut += d.toString().slice(-500); });
+    ff.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`FFmpeg exited ${code}: ${errOut.slice(-300)}`));
+    });
+    ff.on('error', reject);
+  });
+}
+
+function runFFprobe(args) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn('ffprobe', args);
+    let out = '', err = '';
+    ff.stdout.on('data', d => { out += d.toString(); });
+    ff.stderr.on('data', d => { err += d.toString(); });
+    ff.on('close', code => { if (code === 0) resolve(out.trim()); else reject(new Error(err)); });
+    ff.on('error', reject);
+  });
+}
 
 // ─────────────────────────────────────────────
 // CATEGORIES
@@ -111,24 +132,24 @@ async function generateVideoScript(category, artStyle) {
 Art style for ALL scenes: ${artStyle.name} — ${artStyle.prompt}
 
 Rules:
-- Design ONE consistent main character that appears in EVERY scene (same species/look/outfit/colors, only emotion and pose changes per scene)
+- Design ONE consistent main character appearing in EVERY scene (same look/outfit/colors, only emotion/pose changes)
 - Each scene narration MUST match its image emotion exactly
-- Captions must be SHORT and PUNCHY (max 6 words, ALL CAPS)
+- Captions: max 6 words, ALL CAPS, ENGLISH LETTERS ONLY, absolutely NO emojis, NO symbols
 - Story arc: Hook -> Build-up -> Climax -> Twist/Ending
 - Make it emotional and shareable
 
 Return ONLY this exact JSON, no markdown:
 {
   "title": "Episode title under 55 characters",
-  "series": "Series name (e.g. Shadow Files, Toon Tales)",
-  "description": "2 sentence engaging caption with 2-3 emojis",
+  "series": "Series name like Shadow Files or Toon Tales",
+  "description": "2 sentence engaging caption with emojis",
   "hashtags": "#cartoon #shorts #viral #story #fyp #animation #${category.replace(/ /g, '')} #trending #episode #anime",
-  "character_design": "Precise visual description of the ONE main character: species, body shape, color palette, outfit, hair/ears/tail, distinguishing features. Will be reused in every scene.",
+  "character_design": "Precise visual description of ONE main character: species, body, colors, outfit, features",
   "scenes": [
-    { "narration": "Hook opening 1-2 sentences", "caption": "HOOK CAPTION", "emotion": "character emotion, pose, action, background for scene 1 only" },
-    { "narration": "Build-up 1-2 sentences", "caption": "BUILD CAPTION", "emotion": "character emotion, pose, action, background for scene 2 only" },
-    { "narration": "Climax 1-2 sentences", "caption": "CLIMAX CAPTION", "emotion": "character emotion, pose, action, background for scene 3 only" },
-    { "narration": "Twist ending 1-2 sentences", "caption": "ENDING CAPTION", "emotion": "character emotion, pose, action, background for scene 4 only" }
+    { "narration": "Hook opening 1-2 sentences", "caption": "HOOK CAPTION", "emotion": "character emotion pose action background scene 1" },
+    { "narration": "Build-up 1-2 sentences", "caption": "BUILD CAPTION", "emotion": "character emotion pose action background scene 2" },
+    { "narration": "Climax 1-2 sentences", "caption": "CLIMAX CAPTION", "emotion": "character emotion pose action background scene 3" },
+    { "narration": "Twist ending 1-2 sentences", "caption": "ENDING CAPTION", "emotion": "character emotion pose action background scene 4" }
   ]
 }`;
 
@@ -151,71 +172,36 @@ Return ONLY this exact JSON, no markdown:
 
 // ─────────────────────────────────────────────
 // STEP 2 — CLOUDFLARE WORKERS AI: Cartoon Image
-// Model: @cf/black-forest-labs/flux-1-schnell
-// Falls back to Picsum if blocked/fails
 // ─────────────────────────────────────────────
 async function generateCartoonImage(prompt, outputPath, seed) {
-  // PRIMARY: Cloudflare Workers AI (FLUX)
   if (CF_ACCOUNT_ID && CF_API_TOKEN) {
     try {
       const response = await axios.post(
         `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
-        {
-          prompt: prompt,
-          num_steps: 8
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${CF_API_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          responseType: 'arraybuffer',
-          timeout: 90000
-        }
+        { prompt, num_steps: 8, width: 768, height: 1344 },
+        { headers: { 'Authorization': `Bearer ${CF_API_TOKEN}`, 'Content-Type': 'application/json' }, responseType: 'arraybuffer', timeout: 90000 }
       );
-
       if (response.data && response.data.length > 5000) {
         fs.writeFileSync(outputPath, Buffer.from(response.data));
         console.log('[Image] Cloudflare Workers AI ✅');
         return;
       }
     } catch (err) {
-      const msg = err.response ? `${err.response.status} ${JSON.stringify(err.response.data).substring(0, 150)}` : err.message;
-      console.log(`[Image] Cloudflare failed: ${msg}`);
-      console.log('[Image] Trying Pollinations fallback...');
+      const msg = err.response ? `${err.response.status}` : err.message;
+      console.log(`[Image] Cloudflare failed: ${msg} — trying fallback...`);
     }
   }
 
-  // FALLBACK: Pollinations
-  const enc = encodeURIComponent(prompt);
-  const urls = [
-    `https://image.pollinations.ai/prompt/${enc}?width=768&height=1344&seed=${seed}&nologo=true&model=flux&enhance=true`,
-    `https://image.pollinations.ai/prompt/${enc}?width=768&height=1344&seed=${seed + 1}&nologo=true&model=turbo`
-  ];
-
-  for (const [i, url] of urls.entries()) {
-    try {
-      const res = await axios({ method: 'GET', url, responseType: 'arraybuffer', timeout: 70000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (res.data && res.data.length > 5000) {
-        fs.writeFileSync(outputPath, Buffer.from(res.data));
-        console.log(`[Image] Pollinations fallback ${i + 1} ✅`);
-        return;
-      }
-    } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
-  }
-
-  // LAST RESORT: Picsum placeholder
+  // FALLBACK: Picsum
   try {
     const res = await axios({ method: 'GET', url: `https://picsum.photos/seed/${seed}/768/1344`, responseType: 'arraybuffer', timeout: 30000 });
     fs.writeFileSync(outputPath, Buffer.from(res.data));
-    console.log('[Image] Picsum placeholder (last resort)');
-  } catch (e) {
-    throw new Error('All image sources failed');
-  }
+    console.log('[Image] Picsum fallback');
+  } catch (e) { throw new Error('All image sources failed'); }
 }
 
 // ─────────────────────────────────────────────
-// STEP 3 — VOICE: Google TTS (free)
+// STEP 3 — VOICE: Google TTS
 // ─────────────────────────────────────────────
 async function generateVoice(text, outputPath) {
   const cleanText = text.replace(/['"]/g, '').substring(0, 200);
@@ -226,32 +212,60 @@ async function generateVoice(text, outputPath) {
 }
 
 // ─────────────────────────────────────────────
-// STEP 4 — FFMPEG: Caption overlay
+// STEP 4 — FFMPEG: Scene with caption
 // ─────────────────────────────────────────────
-function buildTextSegment(text, y, style) {
-  const safe = text.replace(/'/g, '\u2019').replace(/:/g, '\\:').replace(/\\/g, '\\\\');
-  let f = `drawtext=text='${safe}':fontsize=${style.fontsize}:fontcolor=${style.fontcolor}:fontfile=${style.fontfile}:x=(w-text_w)/2:y=${y}:borderw=${style.borderw}:bordercolor=${style.bordercolor}`;
-  if (style.box) f += `:box=1:boxcolor=${style.boxcolor}:boxborderw=${style.boxborderw}`;
-  return f;
+function cleanCaption(text) {
+  return text
+    .toUpperCase()
+    .replace(/[^\x20-\x7E]/g, '') // remove ALL non-ASCII (emojis, symbols)
+    .replace(/['":\\<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .substring(0, 35)
+    .trim();
 }
 
-async function buildSceneVideo(imgPath, audioPath, caption, outputPath, duration, captionStyle) {
-  const clean = caption.toUpperCase().replace(/['":\\<>|]/g, '').substring(0, 40).trim();
+async function buildSceneVideo(imgPath, audioPath, caption, outputPath, duration, style) {
+  const clean = cleanCaption(caption);
   const words = clean.split(' ');
   let line1 = clean, line2 = '';
-  if (words.length > 3) { const mid = Math.ceil(words.length / 2); line1 = words.slice(0, mid).join(' '); line2 = words.slice(mid).join(' '); }
+  if (words.length > 3) {
+    const mid = Math.ceil(words.length / 2);
+    line1 = words.slice(0, mid).join(' ');
+    line2 = words.slice(mid).join(' ');
+  }
+
+  // Safe escape for ffmpeg drawtext
+  const esc = t => t.replace(/\\/g, '\\\\').replace(/'/g, '').replace(/:/g, '\\:');
+  const l1 = esc(line1);
+  const l2 = esc(line2);
 
   let y1, y2;
-  if (captionStyle.position === 'lower') { y1 = line2 ? 'h-260' : 'h-180'; y2 = 'h-180'; }
+  if (style.position === 'lower') { y1 = line2 ? 'h-260' : 'h-180'; y2 = 'h-180'; }
   else { y1 = line2 ? '(h/2)-90' : '(h/2)-40'; y2 = '(h/2)+15'; }
 
-  let textFilter = buildTextSegment(line1, y1, captionStyle);
-  if (line2) textFilter += ',' + buildTextSegment(line2, y2, captionStyle);
+  const makeText = (t, y) => {
+    let f = `drawtext=text='${t}':fontsize=${style.fontsize}:fontcolor=${style.fontcolor}:fontfile='${style.fontfile}':x=(w-text_w)/2:y=${y}:borderw=${style.borderw}:bordercolor=${style.bordercolor}`;
+    if (style.box) f += `:box=1:boxcolor=${style.boxcolor}:boxborderw=${style.boxborderw}`;
+    return f;
+  };
 
   const fadeOut = Math.max(duration - 0.4, 0);
-  const cmd = `ffmpeg -loop 1 -i "${imgPath}" -i "${audioPath}" -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -t ${duration} -vf "scale=768:1344:force_original_aspect_ratio=decrease,pad=768:1344:(ow-iw)/2:(oh-ih)/2:black,${textFilter},fade=t=in:st=0:d=0.4,fade=t=out:st=${fadeOut}:d=0.4" -y "${outputPath}"`;
-  await execPromise(cmd);
-  console.log(`[FFmpeg] Scene done — "${captionStyle.name}" caption ✅`);
+  let textFilter = makeText(l1, y1);
+  if (l2) textFilter += ',' + makeText(l2, y2);
+
+  const vf = `scale=768:1344:force_original_aspect_ratio=decrease,pad=768:1344:(ow-iw)/2:(oh-ih)/2:black,${textFilter},fade=t=in:st=0:d=0.4,fade=t=out:st=${fadeOut}:d=0.4`;
+
+  await runFFmpeg([
+    '-loop', '1', '-i', imgPath,
+    '-i', audioPath,
+    '-c:v', 'libx264', '-tune', 'stillimage',
+    '-c:a', 'aac', '-b:a', '192k',
+    '-pix_fmt', 'yuv420p',
+    '-t', String(duration),
+    '-vf', vf,
+    '-y', outputPath
+  ]);
+  console.log(`[FFmpeg] Scene done — "${style.name}" ✅`);
 }
 
 // ─────────────────────────────────────────────
@@ -261,7 +275,8 @@ async function stitchFinalVideo(sceneVideos, tempDir, outputPath, category) {
   const concatFile = path.join(tempDir, 'concat.txt');
   fs.writeFileSync(concatFile, sceneVideos.map(v => `file '${v}'`).join('\n'));
   const tempConcat = path.join(tempDir, 'raw.mp4');
-  await execPromise(`ffmpeg -f concat -safe 0 -i "${concatFile}" -c copy -y "${tempConcat}"`);
+
+  await runFFmpeg(['-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', '-y', tempConcat]);
 
   const musicPath = path.join(tempDir, 'music.mp3');
   let hasMusic = false;
@@ -269,14 +284,19 @@ async function stitchFinalVideo(sceneVideos, tempDir, outputPath, category) {
     const res = await axios.get(getThemeMusicUrl(category), { responseType: 'arraybuffer', timeout: 20000 });
     fs.writeFileSync(musicPath, Buffer.from(res.data));
     hasMusic = true;
-    console.log(`[Music] Theme music loaded for "${category}" ✅`);
-  } catch (e) { console.log('[Music] Skipping background music'); }
+    console.log(`[Music] Theme music loaded ✅`);
+  } catch (e) { console.log('[Music] Skipping music'); }
 
   if (hasMusic) {
     try {
-      const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempConcat}"`);
-      const dur = parseFloat(stdout.trim());
-      await execPromise(`ffmpeg -i "${tempConcat}" -i "${musicPath}" -filter_complex "[1:a]atrim=0:${dur},volume=0.12[bg];[0:a]volume=1.0[voice];[voice][bg]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -y "${outputPath}"`);
+      const dur = await runFFprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', tempConcat]);
+      const durNum = parseFloat(dur);
+      await runFFmpeg([
+        '-i', tempConcat, '-i', musicPath,
+        '-filter_complex', `[1:a]atrim=0:${durNum},volume=0.12[bg];[0:a]volume=1.0[voice];[voice][bg]amix=inputs=2:duration=first[aout]`,
+        '-map', '0:v', '-map', '[aout]',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-y', outputPath
+      ]);
       console.log('[Music] Mixed ✅'); return;
     } catch (e) { console.log('[Music] Mix failed, using voice only'); }
   }
@@ -306,10 +326,8 @@ async function uploadToYouTube(videoPath, title, description, hashtags, series) 
 // ─────────────────────────────────────────────
 async function postToInstagram(videoUrl, caption) {
   const con = await axios.post(`https://graph.facebook.com/v18.0/${INSTAGRAM_USER_ID}/media`, { media_type: 'REELS', video_url: videoUrl, caption, share_to_feed: true, access_token: INSTAGRAM_ACCESS_TOKEN });
-  const containerId = con.data.id;
-  console.log(`[Instagram] Container: ${containerId}`);
   await new Promise(r => setTimeout(r, 45000));
-  const pub = await axios.post(`https://graph.facebook.com/v18.0/${INSTAGRAM_USER_ID}/media_publish`, { creation_id: containerId, access_token: INSTAGRAM_ACCESS_TOKEN });
+  const pub = await axios.post(`https://graph.facebook.com/v18.0/${INSTAGRAM_USER_ID}/media_publish`, { creation_id: con.data.id, access_token: INSTAGRAM_ACCESS_TOKEN });
   return pub.data.id;
 }
 
@@ -324,7 +342,7 @@ async function runPostingCycle(category = null) {
 
   categoryIndex++; artStyleIndex++; captionStyleIndex++; dailyCount++;
 
-  console.log(`\n🎬 [VidForge v9] Category: ${selectedCategory}`);
+  console.log(`\n🎬 [VidForge v10] Category: ${selectedCategory}`);
   console.log(`🎨 Art Style: ${selectedArtStyle.name}`);
   console.log(`✏️  Caption: ${selectedCaption.name}`);
   console.log(`📊 Daily: ${dailyCount}/${DAILY_LIMIT}\n`);
@@ -334,7 +352,7 @@ async function runPostingCycle(category = null) {
   fs.mkdirSync(tempDir, { recursive: true });
 
   try {
-    console.log('[VidForge] Writing story & designing character...');
+    console.log('[VidForge] Writing story...');
     const script = await generateVideoScript(selectedCategory, selectedArtStyle);
     console.log(`[VidForge] "${script.title}" | ${script.series}`);
 
@@ -343,13 +361,11 @@ async function runPostingCycle(category = null) {
       const scene = script.scenes[i];
       const imgPath   = path.join(tempDir, `image_${i}.png`);
       const audioPath = path.join(tempDir, `voice_${i}.mp3`);
-
-      console.log(`\n[VidForge] Scene ${i + 1}/4: "${scene.caption}"`);
+      console.log(`\n[VidForge] Scene ${i + 1}/4: "${cleanCaption(scene.caption)}"`);
       await generateCartoonImage(scene.image_prompt, imgPath, characterSeed + i);
       await generateVoice(scene.narration, audioPath);
-
       let duration = 5;
-      try { const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`); duration = Math.max(parseFloat(stdout.trim()) + 0.8, 3.5); } catch (e) {}
+      try { const d = await runFFprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', audioPath]); duration = Math.max(parseFloat(d) + 0.8, 3.5); } catch (e) {}
       sceneDurations.push(duration);
       console.log(`[VidForge] Scene ${i + 1} ready (${duration.toFixed(1)}s)`);
     }
@@ -398,37 +414,25 @@ async function runPostingCycle(category = null) {
 // ─────────────────────────────────────────────
 // ROUTES
 // ─────────────────────────────────────────────
-app.get('/', (req, res) => res.json({ app: 'VidForge AI', version: '9.0.0', status: 'running' }));
+app.get('/', (req, res) => res.json({ app: 'VidForge AI', version: '10.0.0', status: 'running' }));
 
-// ── TEST ROUTE: checks if Cloudflare Workers AI works on Render ──
 app.get('/test-image', async (req, res) => {
-  console.log('[Test] Testing Cloudflare Workers AI...');
-  if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
-    return res.json({ success: false, error: 'CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not set in Render environment!' });
-  }
+  if (!CF_ACCOUNT_ID || !CF_API_TOKEN) return res.json({ success: false, error: 'Cloudflare keys not set' });
   try {
     const response = await axios.post(
       `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
-      { prompt: 'cute chibi cartoon cat, big eyes, colorful, kawaii style', num_steps: 4 },
+      { prompt: 'cute chibi cartoon cat, big eyes, colorful, kawaii style', num_steps: 4, width: 768, height: 1344 },
       { headers: { 'Authorization': `Bearer ${CF_API_TOKEN}`, 'Content-Type': 'application/json' }, responseType: 'arraybuffer', timeout: 60000 }
     );
-    if (response.data && response.data.length > 1000) {
-      console.log('[Test] Cloudflare Workers AI ✅ WORKS!');
-      res.set('Content-Type', 'image/png');
-      res.send(Buffer.from(response.data));
-    } else {
-      res.json({ success: false, error: 'Got response but image too small', size: response.data.length });
-    }
+    if (response.data && response.data.length > 1000) { res.set('Content-Type', 'image/png'); res.send(Buffer.from(response.data)); }
+    else res.json({ success: false, error: 'Image too small' });
   } catch (err) {
-    const msg = err.response ? `${err.response.status}: ${JSON.stringify(err.response.data).substring(0, 300)}` : err.message;
-    console.log(`[Test] Cloudflare FAILED: ${msg}`);
-    res.json({ success: false, error: msg, conclusion: 'Cloudflare is BLOCKED on Render' });
+    res.json({ success: false, error: err.response ? `${err.response.status}` : err.message });
   }
 });
 
 app.get('/status', (req, res) => res.json({
-  running: true, version: '9.0.0',
-  schedule: 'Every 96 minutes (15 videos/day)',
+  running: true, version: '10.0.0',
   dailyCount: `${dailyCount}/${DAILY_LIMIT}`,
   nextCategory: VIDEO_CATEGORIES[categoryIndex % VIDEO_CATEGORIES.length],
   nextArtStyle: ART_STYLES[artStyleIndex % ART_STYLES.length].name,
@@ -437,16 +441,12 @@ app.get('/status', (req, res) => res.json({
   groqConnected: !!GROQ_API_KEY,
   youtubeConnected: !!YOUTUBE_REFRESH_TOKEN,
   instagramConnected: !!INSTAGRAM_ACCESS_TOKEN,
-  imageSource: (CF_ACCOUNT_ID && CF_API_TOKEN) ? 'Cloudflare Workers AI FLUX (primary) + Pollinations (fallback)' : 'Pollinations only',
-  testImageUrl: '/test-image',
-  captionStyles: CAPTION_STYLES.map(s => s.name),
-  artStyles: ART_STYLES.map(s => s.name),
   timestamp: new Date().toISOString()
 }));
 
 app.post('/generate', async (req, res) => {
   const { category } = req.body || {};
-  if (dailyCount >= DAILY_LIMIT) return res.json({ message: 'Daily limit reached!', dailyCount, DAILY_LIMIT });
+  if (dailyCount >= DAILY_LIMIT) return res.json({ message: 'Daily limit reached!' });
   res.json({ message: '🎬 Cartoon episode started!', category: category || 'auto' });
   runPostingCycle(category);
 });
@@ -454,7 +454,7 @@ app.post('/generate', async (req, res) => {
 app.post('/test-script', async (req, res) => {
   const cat = (req.body || {}).category || 'horror';
   const style = ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)];
-  try { const script = await generateVideoScript(cat, style); res.json({ success: true, category: cat, artStyle: style.name, script }); }
+  try { const script = await generateVideoScript(cat, style); res.json({ success: true, script }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -466,7 +466,7 @@ app.get('/auth/youtube', (req, res) => {
 app.get('/auth/youtube/callback', async (req, res) => {
   const oauth2Client = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REDIRECT_URI);
   const { tokens } = await oauth2Client.getToken(req.query.code);
-  res.json({ message: 'Save this refresh_token to Render!', refresh_token: tokens.refresh_token });
+  res.json({ message: 'Save this refresh_token!', refresh_token: tokens.refresh_token });
 });
 
 // ─────────────────────────────────────────────
@@ -474,9 +474,8 @@ app.get('/auth/youtube/callback', async (req, res) => {
 // ─────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 VidForge AI v9.0 — Cloudflare Workers AI + ${ART_STYLES.length} Art Styles + ${CAPTION_STYLES.length} Caption Styles`);
+  console.log(`\n🚀 VidForge AI v10.0 — spawn FFmpeg (no buffer limit) + Cloudflare AI`);
   console.log(`☁️  Cloudflare: ${(CF_ACCOUNT_ID && CF_API_TOKEN) ? 'ENABLED ✅' : 'NOT SET ❌'}`);
-  console.log(`🧪 Test image: http://localhost:${PORT}/test-image`);
   console.log(`⏰ Every 96 min = 15 videos/day | 📊 http://localhost:${PORT}/status\n`);
 });
 
