@@ -83,7 +83,7 @@ const STATE_FILE          = path.join('/tmp', 'vidforge_state.json');
 const LOGO_PATH           = path.join(__dirname, 'assets', 'logo.png');
 
 // ─── PHONK MUSIC — local file uploaded to repo root
-const PHONK_PATH = path.join(__dirname, 'phonk.mp3');
+const PHONK_PATH = path.join(__dirname, 'music', 'phonk.mp3');
 
 // ─────────────────────────────────────────────
 // MULTI-LANGUAGE DUBBING CONFIG
