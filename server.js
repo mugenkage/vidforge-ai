@@ -761,7 +761,7 @@ async function stitchFinalVideo(sceneVideos, voiceAudios, endCardPath, tempDir, 
         '-stream_loop', '-1', '-i', PHONK_PATH,   // loop phonk infinitely
         '-filter_complex',
           `[1:a]volume=1.0[voice];` +
-          `[2:a]volume=0.12,afade=t=in:st=0:d=1.5,afade=t=out:st=${Math.max(durNum - 2, 0)}:d=2[phonk];` +
+          `[2:a]volume=0.12,afade=t=in:st=0:d=1.5,atrim=end=${durNum}[phonk];` +
           `[voice][phonk]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
         '-map', '0:v', '-map', '[aout]',
         '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
